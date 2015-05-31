@@ -41,6 +41,7 @@
 #include "max31855.h"
 #include "systemfan.h"
 #include "setup.h"
+#include "json_response.h"
 
 extern uint8_t logobmp[];
 extern uint8_t stopbmp[];
@@ -158,6 +159,21 @@ typedef enum eMainMode {
 	MAIN_REFLOW
 } MainMode_t;
 
+uint8_t read_command(char* buffer, uint8_t* position, uint8_t max_len) {
+	while (uart_isrxready()) {
+		buffer[*position] = uart_readc();
+		if (buffer[*position] == '\n' || buffer[*position] == '\r' || (*position) >= max_len) {
+			buffer[*position] = '\0';
+			uint8_t tmp = *position;
+			*position = 0;
+			return tmp;
+		}
+		(*position)++;
+	}
+
+	return 0;
+}
+
 static int32_t Main_Work(void) {
 	static MainMode_t mode = MAIN_HOME;
 	static uint16_t setpoint = 0;
@@ -178,17 +194,15 @@ static int32_t Main_Work(void) {
 
 	uint32_t keyspressed = Keypad_Get();
 
-	char serial_cmd[255] = "";
-	char* cmd_select_profile = "select profile %d";
-	char* cmd_bake = "bake %d %d";
-	char* cmd_dump_profile = "dump profile %d";
-	char* cmd_setting = "setting %d %f";
+	static char serial_cmd[255] = "";
+	static uint8_t serial_cmd_position = 0;
 
-	if (uart_isrxready()) {
-		int len = uart_readline(serial_cmd, 255);
+	if ((len=read_command(serial_cmd, &serial_cmd_position, 255)) != 0) {
+//		int len = uart_readline(serial_cmd, 255);
+		printf("\nCmd: %s (%u)", serial_cmd, len);
 
 		if (len > 0) {
-			int param, param1;
+			int param, param1, param2;
 			float paramF;
 
 			if (strcmp(serial_cmd, "about") == 0) {
@@ -238,12 +252,12 @@ static int32_t Main_Work(void) {
 				Sensor_ListAll();
 				printf("\n");
 
-			} else if (sscanf(serial_cmd, cmd_select_profile, &param) > 0) {
+			} else if (sscanf(serial_cmd, "select profile %d", &param) > 0) {
 				// select profile
 				Reflow_SelectProfileIdx(param);
 				printf("\nSelected profile %d: %s\n", param, Reflow_GetProfileName());
 
-			} else if (sscanf(serial_cmd, cmd_bake, &param, &param1) > 0) {
+			} else if (sscanf(serial_cmd, "bake %d %d", &param, &param1) > 0) {
 				if (param < SETPOINT_MIN) {
 					printf("\nSetpoint must be >= %ddegC\n", SETPOINT_MIN);
 					param = SETPOINT_MIN;
@@ -270,15 +284,23 @@ static int32_t Main_Work(void) {
 				mode = MAIN_BAKE;
 				Reflow_SetMode(REFLOW_BAKE);
 
-			} else if (sscanf(serial_cmd, cmd_dump_profile, &param) > 0) {
-				printf("\nDumping profile %d: %s\n ", param, Reflow_GetProfileName());
+			} else if (sscanf(serial_cmd, "dump profile %d", &param) > 0) {
 				Reflow_DumpProfile(param);
 
-			} else if (sscanf(serial_cmd, cmd_setting, &param, &paramF) > 0) {
+			} else if (sscanf(serial_cmd, "setting %d %f", &param, &paramF) > 0) {
 				Setup_setRealValue(param, paramF);
 				printf("\nAdjusted setting: ");
 				Setup_printFormattedValue(param);
 
+			} else if (sscanf(serial_cmd, "set sp %d %d %d", &param, &param1, &param2) > 0) {
+				Reflow_SetSetpointAtIdxForProfile(param, param1, param2);
+				json_response_result(0);
+			} else if (sscanf(serial_cmd, "save %d", &param) > 0) {
+				int res = Reflow_SaveEEProfileForProfile(param);
+				json_response_result(res);
+			} else if (sscanf(serial_cmd, "logging %d", &param) > 0) {
+				Reflow_SetStandbyLogging(param);
+				json_response_result(0);
 			} else {
 				printf("\nCannot understand command, ? for help\n");
 			}

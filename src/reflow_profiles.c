@@ -6,6 +6,7 @@
 #include "nvstorage.h"
 #include "eeprom.h"
 #include "reflow.h"
+#include "json_response.h"
 
 #include "reflow_profiles.h"
 
@@ -159,13 +160,17 @@ int Reflow_GetEEProfileIdx(void) {
 }
 
 int Reflow_SaveEEProfile(void) {
+	return Reflow_SaveEEProfileForProfile(profileidx);
+}
+
+int Reflow_SaveEEProfileForProfile(int profile) {
 	int retval = 0;
 	uint8_t offset;
 	uint16_t* tempptr;
-	if (profileidx == (NUMPROFILES - 2)) {
+	if (profile == (NUMPROFILES - 2)) {
 		offset = 0;
 		tempptr = ee1.temperatures;
-	} else if (profileidx == (NUMPROFILES - 1)) {
+	} else if (profile == (NUMPROFILES - 1)) {
 		offset = 128;
 		tempptr = ee2.temperatures;
 	} else {
@@ -181,9 +186,13 @@ int Reflow_SaveEEProfile(void) {
 }
 
 void Reflow_ListProfiles(void) {
+	const char* temp[NUMPROFILES];
+
 	for (int i = 0; i < NUMPROFILES; i++) {
-		printf("%d: %s\n", i, profiles[i]->name);
+		temp[i] = profiles[i]->name;
 	}
+
+	json_response_string_array(0, temp, NUMPROFILES);
 }
 
 const char* Reflow_GetProfileName(void) {
@@ -202,6 +211,16 @@ void Reflow_SetSetpointAtIdx(uint8_t idx, uint16_t value) {
 	if (value > SETPOINT_MAX) { return; }
 
 	uint16_t* temp = (uint16_t*) &profiles[profileidx]->temperatures[idx];
+	if (temp >= (uint16_t*)0x40000000) {
+		*temp = value; // If RAM-based
+	}
+}
+
+void Reflow_SetSetpointAtIdxForProfile(int profile, uint8_t idx, uint16_t value) {
+	if (idx > (NUMPROFILETEMPS - 1)) { return; }
+	if (value > SETPOINT_MAX) { return; }
+
+	uint16_t* temp = (uint16_t*) &profiles[profile]->temperatures[idx];
 	if (temp >= (uint16_t*)0x40000000) {
 		*temp = value; // If RAM-based
 	}
@@ -228,19 +247,14 @@ void Reflow_PlotProfile(int highlight) {
 
 void Reflow_DumpProfile(int profile) {
 	if (profile > NUMPROFILES) {
-		printf("\nNo profile with id: %d\n", profile);
+		json_response_message(-1, "Invalid profile id");
 		return;
 	}
 
-	int current = profileidx;
-	profileidx = profile;
-
+	int values[NUMPROFILETEMPS];
 	for (int i = 0; i < NUMPROFILETEMPS; i++) {
-		printf("%4d,", Reflow_GetSetpointAtIdx(i));
-		if (i == 15 || i == 31) {
-			printf("\n ");
-		}
+		values[i] = profiles[profile]->temperatures[i];
 	}
-	printf("\n");
-	profileidx = current;
+
+	json_response_int_array(0, values, NUMPROFILETEMPS);
 }

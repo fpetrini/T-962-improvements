@@ -112,7 +112,19 @@ static int32_t Reflow_Work(void) {
 	}
 
 	if (!(mymode == REFLOW_STANDBY && standby_logging == 0)) {
-		printf("\n%6.1f,  %5.1f, %5.1f, %5.1f, %5.1f,  %3u, %5.1f,  %3u, %3u,  %5.1f, %s",
+//		printf("\n%6.1f,  %5.1f, %5.1f, %5.1f, %5.1f,  %3u, %5.1f,  %3u, %3u,  %5.1f, %s",
+//		       ((float)numticks / TICKS_PER_SECOND),
+//		       Sensor_GetTemp(TC_LEFT),
+//		       Sensor_GetTemp(TC_RIGHT),
+//		       Sensor_GetTemp(TC_EXTRA1),
+//		       Sensor_GetTemp(TC_EXTRA2),
+//		       intsetpoint, avgtemp,
+//		       heat, fan,
+//		       Sensor_GetTemp(TC_COLD_JUNCTION),
+//		       modestr);
+
+		printf(
+				"\n{\"time\":%.1f,\"temp0\":%.1f,\"temp1\":%.1f,\"temp2\":%.1f,\"temp3\":%.1f,\"set\":%u,\"actual\":%.1f,\"heat\":%u,\"fan\":%u,\"coldj\":%.1f,\"mode\":\"%s\"}",
 		       ((float)numticks / TICKS_PER_SECOND),
 		       Sensor_GetTemp(TC_LEFT),
 		       Sensor_GetTemp(TC_RIGHT),
@@ -303,4 +315,8 @@ int32_t Reflow_Run(uint32_t thetime, float meastemp, uint8_t* pheat, uint8_t* pf
 
 void Reflow_ToggleStandbyLogging(void) {
 	standby_logging = !standby_logging;
+}
+
+void Reflow_SetStandbyLogging(int enabled) {
+	standby_logging = enabled;
 }
